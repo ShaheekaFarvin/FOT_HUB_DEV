@@ -1,0 +1,13 @@
+const router = require('express').Router();
+const { protect } = require('../middleware/auth');
+const upload = require('../middleware/upload');
+const ctrl = require('../controllers/studentController');
+router.get('/complaints',    protect, ctrl.getMyComplaints);
+router.get('/complaints/all', protect, ctrl.getAllComplaintsPublic);
+router.post('/complaints',   protect, upload.single('image'), ctrl.submitComplaint);
+router.get('/lost-found',    protect, ctrl.getLostFoundItems);
+router.post('/lost-found',            protect, upload.single('image'), ctrl.submitLostFound);
+router.put('/lost-found/:id',  protect, upload.single('image'), ctrl.updateLostFound);
+router.delete('/lost-found/:id', protect, ctrl.deleteLostFound);
+router.get('/announcements', protect, ctrl.getAnnouncements);
+module.exports = router;
