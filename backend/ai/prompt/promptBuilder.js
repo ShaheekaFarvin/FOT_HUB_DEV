@@ -34,13 +34,27 @@ const SECTION_DIVIDER = '================================================';
 
 const sectionHeader = (title) => `${title}\n${'-'.repeat(title.length)}`;
 
+const ALLOWED_CURRENT_USER_FIELDS = ['name', 'role', 'department', 'adminType'];
+
+const pickAllowedUserFields = (user) => {
+  const picked = {};
+  ALLOWED_CURRENT_USER_FIELDS.forEach((field) => {
+    if (user[field] !== undefined && user[field] !== null) {
+      picked[field] = user[field];
+    }
+  });
+  return picked;
+};
+
 const formatCurrentUserSection = (user) => {
+  const safeUser = pickAllowedUserFields(user);
+
   let block = `${sectionHeader('Current User')}\n`;
-  block += `Name: ${user.name}\n`;
-  block += `Role: ${user.role}\n`;
-  block += `Department: ${user.department}\n`;
-  if (user.adminType !== undefined && user.adminType !== null && user.adminType !== '') {
-    block += `(Admin Type: ${user.adminType})\n`;
+  block += `Name: ${safeUser.name}\n`;
+  block += `Role: ${safeUser.role}\n`;
+  block += `Department: ${safeUser.department}\n`;
+  if (safeUser.adminType !== undefined && safeUser.adminType !== '') {
+    block += `(Admin Type: ${safeUser.adminType})\n`;
   }
   return block;
 };
