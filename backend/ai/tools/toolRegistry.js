@@ -1,30 +1,30 @@
 const tools = [
   {
     name: 'searchAnnouncements',
-    description: 'Search faculty announcements by keyword or category.',
+    description: 'Search faculty announcements',
   },
   {
     name: 'checkVotingEligibility',
-    description: "Check whether a student is eligible to vote in a given election.",
+    description: 'Check whether the current student is eligible to vote',
   },
   {
     name: 'searchLostItems',
-    description: 'Search Lost & Found items by keyword or category.',
+    description: 'Search reported lost and found items',
   },
   {
     name: 'submitComplaint',
-    description: 'Submit a new complaint on behalf of the student.',
+    description: 'Submit a student complaint',
   },
   {
     name: 'getComplaintStatus',
-    description: "Get the current status of a student's submitted complaint.",
+    description: 'Get the status of a submitted complaint',
   },
   {
     name: 'getNotifications',
-    description: "Get a student's unread notifications.",
+    description: 'Retrieve notifications for the current user',
   },
 ];
 
-const getRegisteredTools = () => tools;
+const getAvailableTools = () => tools;
 
-module.exports = { getRegisteredTools };
+module.exports = { getAvailableTools };
