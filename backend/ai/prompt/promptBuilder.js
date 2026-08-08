@@ -30,36 +30,69 @@ Rules for tool use:
 - When listing multiple items (announcements, lost items, notifications), use a brief bulleted list rather than a long paragraph.
 - Stay professional and respectful even if the user is frustrated (e.g. about a complaint); acknowledge their concern before giving the answer.`;
 
-/**
- * @param {object} context - output of contextBuilder: { user, conversation }
- * @param {Array}  tools   - optional list of available tools (from Tool Registry, built later)
- * @returns {string} the complete prompt string
- */
-const buildPrompt = (context, tools = []) => {
-  const { user, conversation } = context;
+const SECTION_DIVIDER = '================================================';
 
-  const currentMessage = conversation[conversation.length - 1];
-  const history = conversation.slice(0, -1);
+const sectionHeader = (title) => `${title}\n${'-'.repeat(title.length)}`;
 
-  let prompt = `${SYSTEM_ROLE}\n\n`;
+const formatCurrentUserSection = (user) => {
+  let block = `${sectionHeader('Current User')}\n`;
+  block += `Name: ${user.name}\n`;
+  block += `Role: ${user.role}\n`;
+  block += `Department: ${user.department}\n`;
+  if (user.adminType !== undefined && user.adminType !== null && user.adminType !== '') {
+    block += `(Admin Type: ${user.adminType})\n`;
+  }
+  return block;
+};
 
-  prompt += `Current User:\n- Name: ${user.name}\n- Role: ${user.role}${user.department ? `\n- Department: ${user.department}` : ''}\n\n`;
-
-  if (tools.length) {
-    prompt += `Available tools (only these can be used to fetch real data or take action):\n${tools
-      .map((t) => `- ${t.name}: ${t.description}`)
-      .join('\n')}\n\n`;
+const formatConversationHistorySection = (conversation) => {
+  let block = `${sectionHeader('Conversation History')}\n`;
+  if (Array.isArray(conversation) && conversation.length) {
+    block += conversation
+      .map((entry) => `${entry.role === 'assistant' ? 'Assistant' : 'User'}: ${entry.content}`)
+      .join('\n');
+    block += '\n';
   } else {
-    prompt += `Available tools: none for this request — answer only from the conversation so far, and do not claim to have looked anything up.\n\n`;
+    block += '(No previous conversation)\n';
+  }
+  return block;
+};
+
+const formatAvailableToolsSection = (tools) => {
+  let block = `${sectionHeader('Available Tools')}\n`;
+  if (Array.isArray(tools) && tools.length) {
+    block += tools.map((tool) => `- ${tool.name}: ${tool.description}`).join('\n');
+    block += '\n';
+  } else {
+    block += '- None\n';
+  }
+  return block;
+};
+
+const formatCurrentUserMessageSection = (currentMessage) => `${sectionHeader('Current User Message')}\n${currentMessage}`;
+
+const buildPrompt = (context, tools = []) => {
+  if (!context || typeof context !== 'object') {
+    throw new Error('Prompt Builder: a valid context object is required.');
+  }
+  if (!context.user || typeof context.user !== 'object') {
+    throw new Error('Prompt Builder: context.user is required.');
+  }
+  if (typeof context.currentMessage !== 'string' || !context.currentMessage.trim()) {
+    throw new Error('Prompt Builder: context.currentMessage is required and must be a non-empty string.');
   }
 
-  if (history.length) {
-    prompt += `Conversation history:\n${history.join('\n')}\n\n`;
-  }
+  const { user, conversation = [], currentMessage } = context;
 
-  prompt += `Student: ${currentMessage}`;
+  const sections = [
+    SYSTEM_ROLE,
+    `${SECTION_DIVIDER}\n${formatCurrentUserSection(user)}`.trimEnd(),
+    `${SECTION_DIVIDER}\n${formatConversationHistorySection(conversation)}`.trimEnd(),
+    `${SECTION_DIVIDER}\n${formatAvailableToolsSection(tools)}`.trimEnd(),
+    `${SECTION_DIVIDER}\n${formatCurrentUserMessageSection(currentMessage)}`,
+  ];
 
-  return prompt;
+  return sections.join('\n\n');
 };
 
 module.exports = { buildPrompt };
