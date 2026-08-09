@@ -5,6 +5,7 @@ const { buildContext } = require('../ai/context/contextBuilder');
 const { verifyRole } = require('../ai/roles/roleVerifier');
 const { routeIntent } = require('../ai/routing/intentRouter');
 const { getAvailableTools, getGeminiFunctionDeclarations } = require('../ai/tools/toolRegistry');
+const { detectToolCall } = require('../ai/tools/toolCallDetector');
 const { buildPrompt } = require('../ai/prompt/promptBuilder');
 
 let ai = null;
@@ -70,6 +71,23 @@ exports.sendMessage = async (req, res) => {
     });
 
     const reply = response.text?.trim();
+
+    const detection = detectToolCall(response);
+    if (detection.isToolCall) {
+      console.log('[TOOL CALL DETECTOR] Function call detected');
+      console.log(`[TOOL CALL DETECTOR] Name: ${detection.toolCall.name}`);
+      console.log(`[TOOL CALL DETECTOR] Arguments: ${JSON.stringify(detection.toolCall.arguments)}`);
+
+      const holdingReply = `I found a matching action (${detection.toolCall.name}), but I can't complete that yet — this capability is coming soon. Please try again later or contact the faculty office directly.`;
+      addMessage(sessionId, 'user', trimmedMessage);
+      addMessage(sessionId, 'assistant', holdingReply);
+      console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory (tool-call boundary reply)');
+      return res.json({ reply: holdingReply });
+    }
+    if (detection.error) {
+      console.log(`[TOOL CALL DETECTOR] ${detection.error}`);
+    }
+
     if (!reply) {
       return res.status(502).json({ message: 'AI did not return a response. Try again.' });
     }
