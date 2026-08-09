@@ -1,26 +1,49 @@
 const INTENT_RULES = [
-  { intent: 'CHECK_VOTING_ELIGIBILITY', tool: 'checkVotingEligibility', keywords: ['vote', 'election', 'candidate'] },
-  { intent: 'SEARCH_ANNOUNCEMENTS', tool: 'searchAnnouncements', keywords: ['announcement', 'notice'] },
-  { intent: 'SEARCH_LOST_ITEMS', tool: 'searchLostItems', keywords: ['lost', 'found', 'item'] },
-  { intent: 'SUBMIT_COMPLAINT', tool: 'submitComplaint', keywords: ['complaint', 'complain', 'issue'] },
-  { intent: 'GET_COMPLAINT_STATUS', tool: 'getComplaintStatus', keywords: ['complaint status', 'my complaint'] },
-  { intent: 'GET_NOTIFICATIONS', tool: 'getNotifications', keywords: ['notification'] },
+  {
+    intent: 'COMPLAINT_STATUS',
+    keywords: ['status of my complaint', 'complaint status', 'check my complaint status', 'track complaint'],
+  },
+  {
+    intent: 'SUBMIT_COMPLAINT',
+    keywords: ['submit a complaint', 'report a problem', 'report a complaint', 'file a complaint', 'complain'],
+  },
+  {
+    intent: 'ANNOUNCEMENTS',
+    keywords: ['announcement', 'announcements', 'notice', 'notices', 'faculty news'],
+  },
+  {
+    intent: 'VOTING_ELIGIBILITY',
+    keywords: ['can i vote', 'voting', 'election', 'eligible to vote', 'voter'],
+  },
+  {
+    intent: 'LOST_AND_FOUND',
+    keywords: ['lost item', 'lost my', 'find a lost', 'found item', 'lost & found', 'lost and found'],
+  },
+  {
+    intent: 'NOTIFICATIONS',
+    keywords: ['notification', 'notifications', 'unread alerts', 'my notifications'],
+  },
 ];
 
-/**
- * @param {string} message - the user's current message
- * @returns { intent: string, tool: string|null }
- */
 const routeIntent = (message) => {
-  const lower = message.toLowerCase();
+  if (typeof message !== 'string') {
+    return { intent: 'UNKNOWN' };
+  }
+
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return { intent: 'UNKNOWN' };
+  }
+
+  const lower = trimmed.toLowerCase();
 
   for (const rule of INTENT_RULES) {
-    if (rule.keywords.some((k) => lower.includes(k))) {
-      return { intent: rule.intent, tool: rule.tool };
+    if (rule.keywords.some((keyword) => lower.includes(keyword))) {
+      return { intent: rule.intent };
     }
   }
 
-  return { intent: 'GENERAL_CONVERSATION', tool: null };
+  return { intent: 'UNKNOWN' };
 };
 
 module.exports = { routeIntent };

@@ -1,4 +1,4 @@
-# FOT Student Hub
+# FOT Student Hub 
 
 A full-stack web portal built to digitize student services for the **Faculty of Technology, Rajarata University of Sri Lanka (RUSL)**. It brings elections, announcements, complaints, lost & found, and an AI assistant into one role-based platform for students and faculty administrators.
 
