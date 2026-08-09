@@ -1,6 +1,11 @@
 const { GoogleGenAI } = require('@google/genai');
 
-
+const { getHistory, addMessage } = require('../ai/memory/conversationMemory');
+const { buildContext } = require('../ai/context/contextBuilder');
+const { verifyRole } = require('../ai/roles/roleVerifier');
+const { routeIntent } = require('../ai/routing/intentRouter');
+const { getAvailableTools } = require('../ai/tools/toolRegistry');
+const { buildPrompt } = require('../ai/prompt/promptBuilder');
 
 let ai = null;
 const getClient = () => {
@@ -13,37 +18,62 @@ const getClient = () => {
   return ai;
 };
 
-const SYSTEM_CONTEXT =
-  'You are FOT Buddy, a friendly assistant for students of the Faculty of ' +
-  'Technology, Rajarata University of Sri Lanka. Keep answers short, clear, ' +
-  'and helpful.';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 
 exports.sendMessage = async (req, res) => {
   try {
     const { message } = req.body;
 
-    // ── Request validation ──
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ message: 'Message text is required' });
     }
     if (message.length > 2000) {
       return res.status(400).json({ message: 'Message is too long (max 2000 characters)' });
     }
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    const trimmedMessage = message.trim();
+
+    const sessionId = req.user._id?.toString() || req.user.id;
+    console.log(`[AI ORCHESTRATOR] session: ${sessionId}`);
+
+    const history = getHistory(sessionId);
+    console.log(`[AI ORCHESTRATOR] history: ${history.length} previous message(s)`);
+
+    const context = buildContext(req.user, trimmedMessage, history);
+    console.log(`[AI ORCHESTRATOR] context built for user: ${context.user.name} (${context.user.role})`);
+
+    const roleInfo = verifyRole(req.user);
+    console.log(`[AI ORCHESTRATOR] role verified: ${roleInfo.role} (${roleInfo.roleType})${roleInfo.adminType ? ` [${roleInfo.adminType}]` : ''}`);
+
+    const intentInfo = routeIntent(trimmedMessage);
+    console.log(`[AI ORCHESTRATOR] intent detected: ${intentInfo.intent}`);
+
+    const tools = getAvailableTools();
+    console.log(`[AI ORCHESTRATOR] tools available: ${tools.length}`);
+
+    const prompt = buildPrompt(context, tools);
+    console.log(`[AI ORCHESTRATOR] prompt built (${prompt.length} chars)`);
 
     const client = getClient();
-
     const response = await client.models.generateContent({
-  model: 'gemini-3.6-flash',
-  contents: `${SYSTEM_CONTEXT}\n\nStudent: ${message.trim()}`,
-});
+      model: GEMINI_MODEL,
+      contents: prompt,
+    });
 
     const reply = response.text?.trim();
     if (!reply) {
       return res.status(502).json({ message: 'AI did not return a response. Try again.' });
     }
+    console.log(`[AI ORCHESTRATOR] gemini responded (${reply.length} chars)`);
 
-    // ── Basic logging ──
-    console.log(`🤖 FOT Buddy | user:${req.user?._id || 'anon'} | msg len:${message.length}`);
+    addMessage(sessionId, 'user', trimmedMessage);
+    addMessage(sessionId, 'assistant', reply);
+    console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory');
+
+    console.log(`🤖 FOT Buddy | user:${sessionId} | intent:${intentInfo.intent} | msg len:${trimmedMessage.length}`);
 
     res.json({ reply });
   } catch (err) {
