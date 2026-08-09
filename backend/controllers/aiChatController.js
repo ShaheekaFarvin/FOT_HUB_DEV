@@ -18,7 +18,7 @@ const getClient = () => {
   return ai;
 };
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 exports.sendMessage = async (req, res) => {
   try {
@@ -35,27 +35,32 @@ exports.sendMessage = async (req, res) => {
     }
 
     const trimmedMessage = message.trim();
-
     const sessionId = req.user._id?.toString() || req.user.id;
-    console.log(`[AI ORCHESTRATOR] session: ${sessionId}`);
+
+    console.log("[AI 1] Controller reached");
 
     const history = getHistory(sessionId);
-    console.log(`[AI ORCHESTRATOR] history: ${history.length} previous message(s)`);
+    console.log("[AI 2] History retrieved:", history);
 
     const context = buildContext(req.user, trimmedMessage, history);
-    console.log(`[AI ORCHESTRATOR] context built for user: ${context.user.name} (${context.user.role})`);
+    console.log("[AI 3] Context built:", context);
 
     const roleInfo = verifyRole(req.user);
-    console.log(`[AI ORCHESTRATOR] role verified: ${roleInfo.role} (${roleInfo.roleType})${roleInfo.adminType ? ` [${roleInfo.adminType}]` : ''}`);
+    console.log("[AI 4] Role verified:", roleInfo);
 
     const intentInfo = routeIntent(trimmedMessage);
-    console.log(`[AI ORCHESTRATOR] intent detected: ${intentInfo.intent}`);
+    console.log("[AI 5] Intent:", intentInfo);
 
     const tools = getAvailableTools();
-    console.log(`[AI ORCHESTRATOR] tools available: ${tools.length}`);
+    console.log("[AI 6] Tools:", tools);
 
     const prompt = buildPrompt(context, tools);
-    console.log(`[AI ORCHESTRATOR] prompt built (${prompt.length} chars)`);
+
+    console.log("[AI 7] GENERATED PROMPT");
+    console.log(prompt);
+    console.log("[AI 7] END PROMPT");
+
+    console.log("[AI 8] Calling Gemini...");
 
     const client = getClient();
     const response = await client.models.generateContent({
@@ -63,21 +68,26 @@ exports.sendMessage = async (req, res) => {
       contents: prompt,
     });
 
+    console.log("[AI 9] Gemini response received");
+    console.log(response);
+
     const reply = response.text?.trim();
     if (!reply) {
       return res.status(502).json({ message: 'AI did not return a response. Try again.' });
     }
-    console.log(`[AI ORCHESTRATOR] gemini responded (${reply.length} chars)`);
 
-    addMessage(sessionId, 'user', trimmedMessage);
-    addMessage(sessionId, 'assistant', reply);
-    console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory');
+    console.log("[AI 10] Reply:", reply);
 
-    console.log(`🤖 FOT Buddy | user:${sessionId} | intent:${intentInfo.intent} | msg len:${trimmedMessage.length}`);
+    addMessage(sessionId, "user", trimmedMessage);
+    addMessage(sessionId, "assistant", reply);
 
-    res.json({ reply });
-  } catch (err) {
-    console.error('FOT Buddy error:', err.message);
-    res.status(500).json({ message: 'FOT Buddy is unavailable right now. Please try again shortly.' });
+    console.log("[AI 11] Messages stored");
+
+    return res.json({ reply });
+  } catch (error) {
+    console.error("[AI ERROR]", error);
+    return res.status(500).json({
+      message: "Unable to process AI request"
+    });
   }
 };
