@@ -138,7 +138,6 @@ console.log('\n--- Test 8: Zero Tool Execution ---');
     'getNotifications(',
     '.functionCall',
     'executeFunction',
-    'executeTool',
   ];
   forbiddenPatterns.forEach((pattern) => {
     assert(

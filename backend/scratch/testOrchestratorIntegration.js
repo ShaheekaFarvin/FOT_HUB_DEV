@@ -25,6 +25,24 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (request === '@google/genai') {
     return { GoogleGenAI: FakeGoogleGenAI };
   }
+  if (request.includes('models/Announcement')) {
+    return { find: () => ({ sort: () => ({ limit: () => Promise.resolve([]) }) }) };
+  }
+  if (request.includes('models/Election')) {
+    return {
+      find: () => Promise.resolve([]),
+      findById: async () => null,
+    };
+  }
+  if (request.includes('models/LostFound')) {
+    return { find: () => ({ sort: () => ({ limit: () => Promise.resolve([]) }) }) };
+  }
+  if (request.includes('models/Complaint')) {
+    return {
+      find: () => ({ sort: () => ({ limit: () => Promise.resolve([]) }) }),
+      create: async (data) => ({ _id: 'mock-complaint-id', ...data }),
+    };
+  }
   return originalLoad.call(this, request, parent, isMain);
 };
 

@@ -6,6 +6,8 @@ const { verifyRole } = require('../ai/roles/roleVerifier');
 const { routeIntent } = require('../ai/routing/intentRouter');
 const { getAvailableTools, getGeminiFunctionDeclarations } = require('../ai/tools/toolRegistry');
 const { detectToolCall } = require('../ai/tools/toolCallDetector');
+const { executeTool } = require('../ai/tools/toolExecutor');
+const { handleToolResult } = require('../ai/tools/toolResultHandler');
 const { buildPrompt } = require('../ai/prompt/promptBuilder');
 
 let ai = null;
@@ -78,11 +80,23 @@ exports.sendMessage = async (req, res) => {
       console.log(`[TOOL CALL DETECTOR] Name: ${detection.toolCall.name}`);
       console.log(`[TOOL CALL DETECTOR] Arguments: ${JSON.stringify(detection.toolCall.arguments)}`);
 
-      const holdingReply = `I found a matching action (${detection.toolCall.name}), but I can't complete that yet — this capability is coming soon. Please try again later or contact the faculty office directly.`;
+      const toolResult = await executeTool(detection.toolCall, req.user);
+      console.log(`[TOOL EXECUTOR] Result: ${JSON.stringify(toolResult)}`);
+
+      const finalReply = await handleToolResult({
+        client,
+        model: GEMINI_MODEL,
+        prompt,
+        geminiResponse: response,
+        toolCall: detection.toolCall,
+        toolResult,
+        functionDeclarations,
+      });
+
       addMessage(sessionId, 'user', trimmedMessage);
-      addMessage(sessionId, 'assistant', holdingReply);
-      console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory (tool-call boundary reply)');
-      return res.json({ reply: holdingReply });
+      addMessage(sessionId, 'assistant', finalReply);
+      console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory (tool cycle complete)');
+      return res.json({ reply: finalReply });
     }
     if (detection.error) {
       console.log(`[TOOL CALL DETECTOR] ${detection.error}`);
