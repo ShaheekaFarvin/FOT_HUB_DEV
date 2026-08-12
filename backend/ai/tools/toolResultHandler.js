@@ -17,9 +17,15 @@ const normalizeToolResult = (toolResult) => {
     };
   }
 
+  const rawErr = typeof toolResult.error === 'string' ? toolResult.error : '';
+  const isTechnicalErr = /mongo|sql|stack|syntaxerror|typeerror|connection|econnrefused|failed to connect/i.test(rawErr);
+  const sanitizedError = isTechnicalErr
+    ? 'Unable to retrieve information due to a temporary service issue.'
+    : (rawErr.trim() || 'Tool execution failed.');
+
   return {
     success: false,
-    error: typeof toolResult.error === 'string' && toolResult.error ? toolResult.error : 'Tool execution failed.',
+    error: sanitizedError,
   };
 };
 

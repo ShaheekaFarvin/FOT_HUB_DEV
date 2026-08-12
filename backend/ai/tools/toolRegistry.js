@@ -34,8 +34,8 @@ const functionDeclarations = [
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string' },
-        category: { type: 'string' },
+        query: { type: 'string', description: 'Search keyword or query string' },
+        category: { type: 'string', description: 'Category filter' },
       },
     },
   },
@@ -45,7 +45,10 @@ const functionDeclarations = [
     parameters: {
       type: 'object',
       properties: {
-        electionId: { type: 'string' },
+        electionId: {
+          type: 'string',
+          description: 'Optional election ID. Omit when the user asks generally about their voting eligibility.',
+        },
       },
     },
   },
@@ -55,9 +58,9 @@ const functionDeclarations = [
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string' },
-        type: { type: 'string' },
-        category: { type: 'string' },
+        query: { type: 'string', description: 'Search query string' },
+        type: { type: 'string', description: 'Type filter (e.g. lost, found)' },
+        category: { type: 'string', description: 'Category filter' },
       },
     },
   },
@@ -67,11 +70,11 @@ const functionDeclarations = [
     parameters: {
       type: 'object',
       properties: {
-        title: { type: 'string' },
-        description: { type: 'string' },
-        category: { type: 'string' },
-        targetAdminType: { type: 'string' },
-        isAnonymous: { type: 'boolean' },
+        title: { type: 'string', description: 'Complaint title' },
+        description: { type: 'string', description: 'Detailed complaint description' },
+        category: { type: 'string', description: 'Complaint category' },
+        targetAdminType: { type: 'string', description: 'Target admin authority' },
+        isAnonymous: { type: 'boolean', description: 'Whether to submit anonymously' },
       },
       required: ['title', 'description'],
     },
@@ -82,7 +85,10 @@ const functionDeclarations = [
     parameters: {
       type: 'object',
       properties: {
-        complaintId: { type: 'string' },
+        complaintId: {
+          type: 'string',
+          description: 'Optional complaint ID. Omit when the user asks generally about their complaint statuses.',
+        },
       },
     },
   },
@@ -92,7 +98,10 @@ const functionDeclarations = [
     parameters: {
       type: 'object',
       properties: {
-        unreadOnly: { type: 'boolean' },
+        unreadOnly: {
+          type: 'boolean',
+          description: 'Optional flag. Omit to retrieve all recent notifications and updates for the user.',
+        },
       },
     },
   },

@@ -21,7 +21,7 @@ const getClient = () => {
   return ai;
 };
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
 exports.sendMessage = async (req, res) => {
   try {
