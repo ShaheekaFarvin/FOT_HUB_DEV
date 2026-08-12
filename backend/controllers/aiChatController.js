@@ -4,7 +4,10 @@ const { getHistory, addMessage } = require('../ai/memory/conversationMemory');
 const { buildContext } = require('../ai/context/contextBuilder');
 const { verifyRole } = require('../ai/roles/roleVerifier');
 const { routeIntent } = require('../ai/routing/intentRouter');
-const { getAvailableTools } = require('../ai/tools/toolRegistry');
+const { getAvailableTools, getGeminiFunctionDeclarations } = require('../ai/tools/toolRegistry');
+const { detectToolCall } = require('../ai/tools/toolCallDetector');
+const { executeTool } = require('../ai/tools/toolExecutor');
+const { handleToolResult } = require('../ai/tools/toolResultHandler');
 const { buildPrompt } = require('../ai/prompt/promptBuilder');
 
 let ai = null;
@@ -18,7 +21,7 @@ const getClient = () => {
   return ai;
 };
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
 exports.sendMessage = async (req, res) => {
   try {
@@ -35,59 +38,84 @@ exports.sendMessage = async (req, res) => {
     }
 
     const trimmedMessage = message.trim();
-    const sessionId = req.user._id?.toString() || req.user.id;
 
-    console.log("[AI 1] Controller reached");
+    const sessionId = req.user._id?.toString() || req.user.id;
+    console.log(`[AI ORCHESTRATOR] session: ${sessionId}`);
 
     const history = getHistory(sessionId);
-    console.log("[AI 2] History retrieved:", history);
+    console.log(`[AI ORCHESTRATOR] history: ${history.length} previous message(s)`);
 
     const context = buildContext(req.user, trimmedMessage, history);
-    console.log("[AI 3] Context built:", context);
+    console.log(`[AI ORCHESTRATOR] context built for user: ${context.user.name} (${context.user.role})`);
 
     const roleInfo = verifyRole(req.user);
-    console.log("[AI 4] Role verified:", roleInfo);
+    console.log(`[AI ORCHESTRATOR] role verified: ${roleInfo.role} (${roleInfo.roleType})${roleInfo.adminType ? ` [${roleInfo.adminType}]` : ''}`);
 
     const intentInfo = routeIntent(trimmedMessage);
-    console.log("[AI 5] Intent:", intentInfo);
+    console.log(`[AI ORCHESTRATOR] intent detected: ${intentInfo.intent}`);
 
     const tools = getAvailableTools();
-    console.log("[AI 6] Tools:", tools);
+    console.log(`[AI ORCHESTRATOR] tools available: ${tools.length}`);
 
     const prompt = buildPrompt(context, tools);
+    console.log(`[AI ORCHESTRATOR] prompt built (${prompt.length} chars)`);
 
-    console.log("[AI 7] GENERATED PROMPT");
-    console.log(prompt);
-    console.log("[AI 7] END PROMPT");
-
-    console.log("[AI 8] Calling Gemini...");
+    const functionDeclarations = getGeminiFunctionDeclarations();
+    console.log(`[AI 6] Tools: ${functionDeclarations.map((fn) => fn.name).join(', ')}`);
 
     const client = getClient();
     const response = await client.models.generateContent({
       model: GEMINI_MODEL,
       contents: prompt,
+      config: {
+        tools: [{ functionDeclarations }],
+      },
     });
 
-    console.log("[AI 9] Gemini response received");
-    console.log(response);
-
     const reply = response.text?.trim();
+
+    const detection = detectToolCall(response);
+    if (detection.isToolCall) {
+      console.log('[TOOL CALL DETECTOR] Function call detected');
+      console.log(`[TOOL CALL DETECTOR] Name: ${detection.toolCall.name}`);
+      console.log(`[TOOL CALL DETECTOR] Arguments: ${JSON.stringify(detection.toolCall.arguments)}`);
+
+      const toolResult = await executeTool(detection.toolCall, req.user);
+      console.log(`[TOOL EXECUTOR] Result: ${JSON.stringify(toolResult)}`);
+
+      const finalReply = await handleToolResult({
+        client,
+        model: GEMINI_MODEL,
+        prompt,
+        geminiResponse: response,
+        toolCall: detection.toolCall,
+        toolResult,
+        functionDeclarations,
+      });
+
+      addMessage(sessionId, 'user', trimmedMessage);
+      addMessage(sessionId, 'assistant', finalReply);
+      console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory (tool cycle complete)');
+      return res.json({ reply: finalReply });
+    }
+    if (detection.error) {
+      console.log(`[TOOL CALL DETECTOR] ${detection.error}`);
+    }
+
     if (!reply) {
       return res.status(502).json({ message: 'AI did not return a response. Try again.' });
     }
+    console.log(`[AI ORCHESTRATOR] gemini responded (${reply.length} chars)`);
 
-    console.log("[AI 10] Reply:", reply);
+    addMessage(sessionId, 'user', trimmedMessage);
+    addMessage(sessionId, 'assistant', reply);
+    console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory');
 
-    addMessage(sessionId, "user", trimmedMessage);
-    addMessage(sessionId, "assistant", reply);
+    console.log(`🤖 FOT Buddy | user:${sessionId} | intent:${intentInfo.intent} | msg len:${trimmedMessage.length}`);
 
-    console.log("[AI 11] Messages stored");
-
-    return res.json({ reply });
-  } catch (error) {
-    console.error("[AI ERROR]", error);
-    return res.status(500).json({
-      message: "Unable to process AI request"
-    });
+    res.json({ reply });
+  } catch (err) {
+    console.error('FOT Buddy error:', err.message);
+    res.status(500).json({ message: 'FOT Buddy is unavailable right now. Please try again shortly.' });
   }
 };
