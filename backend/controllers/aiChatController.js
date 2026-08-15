@@ -1,27 +1,5 @@
-const { GoogleGenAI } = require('@google/genai');
+const { processUserRequest } = require('../ai/knowledge/ragOrchestrator');
 
-const { getHistory, addMessage } = require('../ai/memory/conversationMemory');
-const { buildContext } = require('../ai/context/contextBuilder');
-const { verifyRole } = require('../ai/roles/roleVerifier');
-const { routeIntent } = require('../ai/routing/intentRouter');
-const { getAvailableTools, getGeminiFunctionDeclarations } = require('../ai/tools/toolRegistry');
-const { detectToolCall } = require('../ai/tools/toolCallDetector');
-const { executeTool } = require('../ai/tools/toolExecutor');
-const { handleToolResult } = require('../ai/tools/toolResultHandler');
-const { buildPrompt } = require('../ai/prompt/promptBuilder');
-
-let ai = null;
-const getClient = () => {
-  if (!ai) {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not set in backend/.env');
-    }
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  }
-  return ai;
-};
-
-const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
 exports.sendMessage = async (req, res) => {
   try {
@@ -39,83 +17,14 @@ exports.sendMessage = async (req, res) => {
 
     const trimmedMessage = message.trim();
 
-    const sessionId = req.user._id?.toString() || req.user.id;
-    console.log(`[AI ORCHESTRATOR] session: ${sessionId}`);
-
-    const history = getHistory(sessionId);
-    console.log(`[AI ORCHESTRATOR] history: ${history.length} previous message(s)`);
-
-    const context = buildContext(req.user, trimmedMessage, history);
-    console.log(`[AI ORCHESTRATOR] context built for user: ${context.user.name} (${context.user.role})`);
-
-    const roleInfo = verifyRole(req.user);
-    console.log(`[AI ORCHESTRATOR] role verified: ${roleInfo.role} (${roleInfo.roleType})${roleInfo.adminType ? ` [${roleInfo.adminType}]` : ''}`);
-
-    const intentInfo = routeIntent(trimmedMessage);
-    console.log(`[AI ORCHESTRATOR] intent detected: ${intentInfo.intent}`);
-
-    const tools = getAvailableTools();
-    console.log(`[AI ORCHESTRATOR] tools available: ${tools.length}`);
-
-    const prompt = buildPrompt(context, tools);
-    console.log(`[AI ORCHESTRATOR] prompt built (${prompt.length} chars)`);
-
-    const functionDeclarations = getGeminiFunctionDeclarations();
-    console.log(`[AI 6] Tools: ${functionDeclarations.map((fn) => fn.name).join(', ')}`);
-
-    const client = getClient();
-    const response = await client.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        tools: [{ functionDeclarations }],
-      },
-    });
-
-    const reply = response.text?.trim();
-
-    const detection = detectToolCall(response);
-    if (detection.isToolCall) {
-      console.log('[TOOL CALL DETECTOR] Function call detected');
-      console.log(`[TOOL CALL DETECTOR] Name: ${detection.toolCall.name}`);
-      console.log(`[TOOL CALL DETECTOR] Arguments: ${JSON.stringify(detection.toolCall.arguments)}`);
-
-      const toolResult = await executeTool(detection.toolCall, req.user);
-      console.log(`[TOOL EXECUTOR] Result: ${JSON.stringify(toolResult)}`);
-
-      const finalReply = await handleToolResult({
-        client,
-        model: GEMINI_MODEL,
-        prompt,
-        geminiResponse: response,
-        toolCall: detection.toolCall,
-        toolResult,
-        functionDeclarations,
-      });
-
-      addMessage(sessionId, 'user', trimmedMessage);
-      addMessage(sessionId, 'assistant', finalReply);
-      console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory (tool cycle complete)');
-      return res.json({ reply: finalReply });
-    }
-    if (detection.error) {
-      console.log(`[TOOL CALL DETECTOR] ${detection.error}`);
-    }
-
-    if (!reply) {
-      return res.status(502).json({ message: 'AI did not return a response. Try again.' });
-    }
-    console.log(`[AI ORCHESTRATOR] gemini responded (${reply.length} chars)`);
-
-    addMessage(sessionId, 'user', trimmedMessage);
-    addMessage(sessionId, 'assistant', reply);
-    console.log('[AI ORCHESTRATOR] turn stored in Conversation Memory');
-
-    console.log(`🤖 FOT Buddy | user:${sessionId} | intent:${intentInfo.intent} | msg len:${trimmedMessage.length}`);
+    const { reply } = await processUserRequest(req.user, trimmedMessage);
 
     res.json({ reply });
   } catch (err) {
     console.error('FOT Buddy error:', err.message);
+    if (err.statusCode === 502) {
+      return res.status(502).json({ message: 'AI did not return a response. Try again.' });
+    }
     res.status(500).json({ message: 'FOT Buddy is unavailable right now. Please try again shortly.' });
   }
 };

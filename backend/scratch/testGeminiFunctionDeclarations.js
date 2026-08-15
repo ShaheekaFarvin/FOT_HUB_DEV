@@ -106,19 +106,30 @@ console.log('\n--- Test 6: submitComplaint Required Properties ---');
 
 console.log('\n--- Test 7: Gemini Configuration Wiring ---');
 {
-  const controllerPath = path.join(__dirname, '..', 'controllers', 'aiChatController.js');
-  const source = fs.readFileSync(controllerPath, 'utf8');
+  // As of Phase 4 / Topic 6.3, direct Gemini request wiring (including
+  // function declarations) lives in ragOrchestrator.js — aiChatController.js
+  // now only handles HTTP concerns and delegates to the orchestrator. See
+  // "Implementations/Phase -04/6.RAG Controller Integration.md", Topic 6.3.
+  const orchestratorPath = path.join(__dirname, '..', 'ai', 'knowledge', 'ragOrchestrator.js');
+  const source = fs.readFileSync(orchestratorPath, 'utf8');
   assert(
     source.includes('getGeminiFunctionDeclarations'),
-    'aiChatController.js imports/uses getGeminiFunctionDeclarations'
+    'ragOrchestrator.js imports/uses getGeminiFunctionDeclarations'
   );
   assert(
     source.includes('config.tools') || source.includes('tools: [{ functionDeclarations }]') || source.includes('tools:'),
-    'aiChatController.js passes tools into the Gemini request config'
+    'ragOrchestrator.js passes tools into the Gemini request config'
   );
   assert(
     /config:\s*{\s*tools:\s*\[\s*{\s*functionDeclarations\s*}\s*\]/.test(source.replace(/\s+/g, ' ')),
-    'controller wires config.tools[0].functionDeclarations exactly as specified'
+    'orchestrator wires config.tools[0].functionDeclarations exactly as specified'
+  );
+
+  const controllerPath = path.join(__dirname, '..', 'controllers', 'aiChatController.js');
+  const controllerSource = fs.readFileSync(controllerPath, 'utf8');
+  assert(
+    controllerSource.includes('ragOrchestrator') && controllerSource.includes('processUserRequest'),
+    'aiChatController.js delegates message processing to ragOrchestrator.processUserRequest'
   );
 }
 
