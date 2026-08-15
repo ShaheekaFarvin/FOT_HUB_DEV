@@ -46,17 +46,17 @@ const buildElectionDocument = (record) => {
   const title = record.title || '';
   const candidates = Array.isArray(record.candidates) ? record.candidates : [];
 
-  const candidateLines = candidates.map(
+  const candidateBlocks = candidates.map(
     (candidate) =>
-      `- ${candidate.name} (${candidate.position}): ${candidate.manifesto ? candidate.manifesto : 'No manifesto provided.'}`
+      `Candidate:\nName: ${candidate.name || 'N/A'}\nPosition: ${candidate.position || 'N/A'}\nManifesto: ${candidate.manifesto ? candidate.manifesto : 'No manifesto provided.'}`
   );
 
   const textBlock = [
-    `Title: ${title}`,
+    `Election: ${title}`,
     `Type: ${record.type || ''}`,
     `Department Scope: ${record.department || 'All'}`,
     `Status: ${record.status}`,
-    candidates.length ? `Candidates:\n${candidateLines.join('\n')}` : 'Candidates: None listed.',
+    candidates.length ? candidateBlocks.join('\n\n') : 'Candidates: None listed.',
   ].join('\n');
 
   return {

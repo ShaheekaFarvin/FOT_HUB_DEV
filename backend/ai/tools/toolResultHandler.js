@@ -29,6 +29,57 @@ const normalizeToolResult = (toolResult) => {
   };
 };
 
+const formatDirectToolFallback = (toolName, safeToolResult) => {
+  if (!safeToolResult || !safeToolResult.success) {
+    return safeToolResult?.error || FALLBACK_TEXT;
+  }
+  const data = safeToolResult.data;
+  if (data === null || data === undefined) {
+    return 'No records were returned.';
+  }
+
+  if (toolName === 'searchLostItems' && Array.isArray(data)) {
+    if (!data.length) return 'No matching active lost or found items were found.';
+    const items = data.map((item) => `- ${item.title || 'Item'} (${item.type || 'lost'}): Location: ${item.location || 'N/A'}`);
+    return items.join('\n');
+  }
+
+  if (toolName === 'searchAnnouncements' && Array.isArray(data)) {
+    if (!data.length) return 'No matching announcements were found.';
+    const items = data.map((ann) => `- ${ann.title || 'Announcement'}: ${ann.content || ''}`);
+    return items.join('\n');
+  }
+
+  if (toolName === 'getComplaintStatus' && Array.isArray(data)) {
+    if (!data.length) return 'You have not submitted any complaints matching this account.';
+    const items = data.map((c) => `- ${c.title || 'Complaint'}: Status is ${c.status || 'Pending'}.`);
+    return items.join('\n');
+  }
+
+  if (toolName === 'getNotifications' && typeof data === 'object') {
+    const annCount = Array.isArray(data.announcements) ? data.announcements.length : 0;
+    const compCount = Array.isArray(data.complaintUpdates) ? data.complaintUpdates.length : 0;
+    return `You have ${annCount} active announcement(s) and ${compCount} complaint update(s).`;
+  }
+
+  if (toolName === 'checkVotingEligibility') {
+    if (typeof data === 'object' && data.title) {
+      return `For ${data.title}, you are ${data.eligible ? 'eligible' : 'not eligible'} to vote.`;
+    }
+    if (Array.isArray(data)) {
+      if (!data.length) return 'There are currently no ongoing elections available for voting.';
+      const items = data.map((e) => `- ${e.title}: ${e.status}`);
+      return items.join('\n');
+    }
+  }
+
+  if (toolName === 'submitComplaint' && typeof data === 'object') {
+    return `Your complaint "${data.title || 'Complaint'}" has been submitted successfully.`;
+  }
+
+  return FALLBACK_TEXT;
+};
+
 const buildModelTurn = (geminiResponse, toolCall) => {
   const candidateContent = geminiResponse?.candidates?.[0]?.content;
   if (candidateContent && typeof candidateContent === 'object') {
@@ -76,10 +127,9 @@ const handleToolResult = async ({
     const safeToolResult = normalizeToolResult(toolResult);
     const contents = buildContents(prompt, geminiResponse, toolCall, safeToolResult);
 
+    // Hardening H4: Omit functionDeclarations from config during the summary turn
+    // to force Gemini into a text-only turn and prevent recursive tool call loops.
     const config = {};
-    if (Array.isArray(functionDeclarations) && functionDeclarations.length > 0) {
-      config.tools = [{ functionDeclarations }];
-    }
 
     const finalResponse = await client.models.generateContent({
       model,
@@ -89,12 +139,15 @@ const handleToolResult = async ({
 
     const text = finalResponse?.text?.trim();
     if (!text) {
-      return FALLBACK_TEXT;
+      console.error('[TOOL RESULT HANDLER] Gemini returned empty text for tool summary turn. Executing direct safe tool fallback.');
+      return formatDirectToolFallback(toolCall.name, safeToolResult);
     }
     return text;
   } catch (err) {
-    return FALLBACK_TEXT;
+    console.error('[TOOL RESULT HANDLER] Error in Gemini tool summary generation:', err?.message || err);
+    const safeToolResult = normalizeToolResult(toolResult);
+    return formatDirectToolFallback(toolCall.name, safeToolResult);
   }
 };
 
-module.exports = { handleToolResult, normalizeToolResult, buildContents };
+module.exports = { handleToolResult, normalizeToolResult, buildContents, formatDirectToolFallback };

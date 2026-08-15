@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Announcement = require('../../models/Announcement');
 const Election = require('../../models/Election');
 const LostFound = require('../../models/LostFound');
@@ -26,7 +27,7 @@ const getUserId = (userContext) => {
 const runSearchAnnouncements = async (args) => {
   const filter = { isActive: true };
   if (args.category) {
-    filter.category = args.category;
+    filter.category = { $regex: `^${args.category}$`, $options: 'i' };
   }
   if (args.query) {
     filter.$or = [
@@ -42,6 +43,9 @@ const runCheckVotingEligibility = async (args, userContext) => {
   const department = userContext.department;
 
   if (args.electionId) {
+    if (!mongoose.Types.ObjectId.isValid(args.electionId)) {
+      return { success: false, error: 'Election not found.' };
+    }
     const election = await Election.findById(args.electionId);
     if (!election) {
       return { success: false, error: 'Election not found.' };
@@ -72,13 +76,24 @@ const runCheckVotingEligibility = async (args, userContext) => {
 const runSearchLostItems = async (args) => {
   const filter = { status: 'active' };
   if (args.type) {
-    filter.type = args.type;
+    filter.type = args.type.toLowerCase();
   }
   if (args.category) {
-    filter.category = args.category;
+    filter.category = { $regex: `^${args.category}$`, $options: 'i' };
   }
-  if (args.query) {
-    filter.title = { $regex: args.query, $options: 'i' };
+  if (args.query && args.query.trim()) {
+    const q = args.query.trim();
+    const qRegex = { $regex: q, $options: 'i' };
+    const searchConditions = [
+      { title: qRegex },
+      { description: qRegex },
+      { category: { $regex: q, $options: 'i' } },
+    ];
+    if (filter.$or) {
+      filter.$and = [{ $or: searchConditions }];
+    } else {
+      filter.$or = searchConditions;
+    }
   }
   const results = await LostFound.find(filter).sort({ createdAt: -1 }).limit(10);
   return { success: true, data: results };
@@ -86,6 +101,9 @@ const runSearchLostItems = async (args) => {
 
 const runSubmitComplaint = async (args, userContext) => {
   const userId = getUserId(userContext);
+  if (!userId) {
+    return { success: false, error: 'A valid user context is required for this action.' };
+  }
   const targetAdminType = ALLOWED_COMPLAINT_TARGETS.includes(args.targetAdminType)
     ? args.targetAdminType
     : 'super_admin';
@@ -104,8 +122,14 @@ const runSubmitComplaint = async (args, userContext) => {
 
 const runGetComplaintStatus = async (args, userContext) => {
   const userId = getUserId(userContext);
+  if (!userId) {
+    return { success: false, error: 'A valid user context is required for this action.' };
+  }
   const filter = { submittedBy: userId };
   if (args.complaintId) {
+    if (!mongoose.Types.ObjectId.isValid(args.complaintId)) {
+      return { success: true, data: [] };
+    }
     filter._id = args.complaintId;
   }
   const results = await Complaint.find(filter).sort({ createdAt: -1 });
@@ -114,6 +138,9 @@ const runGetComplaintStatus = async (args, userContext) => {
 
 const runGetNotifications = async (args, userContext) => {
   const userId = getUserId(userContext);
+  if (!userId) {
+    return { success: false, error: 'A valid user context is required for this action.' };
+  }
   const [announcements, complaintUpdates] = await Promise.all([
     Announcement.find({ isActive: true }).sort({ createdAt: -1 }).limit(5),
     Complaint.find({ submittedBy: userId }).sort({ updatedAt: -1 }).limit(5),
