@@ -1,3 +1,5 @@
+const { formatRetrievedKnowledge } = require('../knowledge/contextFormatter');
+
 const SYSTEM_ROLE = `You are FOT Buddy, the official AI assistant for the Faculty of Technology (FOT), Rajarata University of Sri Lanka.
 
 # WHO YOU HELP
@@ -25,6 +27,11 @@ Rules for tool use:
 - Do not present assumptions as facts. If you must infer something, label it clearly as a suggestion or best guess, not a confirmed fact.
 - If the user's request is ambiguous and materially changes which tool or answer is correct, ask a short clarifying question instead of guessing which one they meant.
 - Never fabricate a tool result or pretend a tool was called when it wasn't.
+
+# RAG GROUNDING RULES (RETRIEVED KNOWLEDGE)
+1. Use Retrieved Knowledge: When answering questions about faculty announcements, elections, lost & found items, or campus events, rely primarily on the information provided in the "Retrieved Knowledge" section.
+2. Fact Strictness: Do NOT invent, assume, or fabricate facts, dates, names, or policies that are not supported by the retrieved knowledge or live tool results.
+3. Information Absence: If the retrieved knowledge does not contain the answer to the user's question, state politely that the available faculty information does not contain the answer, and suggest checking with the faculty office.
 
 # RESPONSE STYLE & FORMATTING
 - Keep answers short, clear, and friendly — a few sentences or a short list, not long essays.
@@ -88,7 +95,7 @@ const formatAvailableToolsSection = (tools) => {
 
 const formatCurrentUserMessageSection = (currentMessage) => `${sectionHeader('Current User Message')}\n${currentMessage}`;
 
-const buildPrompt = (context, tools = []) => {
+const buildPrompt = (context, tools = [], retrievedKnowledge = []) => {
   if (!context || typeof context !== 'object') {
     throw new Error('Prompt Builder: a valid context object is required.');
   }
@@ -106,6 +113,7 @@ const buildPrompt = (context, tools = []) => {
     `${SECTION_DIVIDER}\n${formatCurrentUserSection(user)}`.trimEnd(),
     `${SECTION_DIVIDER}\n${formatConversationHistorySection(conversation)}`.trimEnd(),
     `${SECTION_DIVIDER}\n${formatAvailableToolsSection(tools)}`.trimEnd(),
+    `${SECTION_DIVIDER}\n${formatRetrievedKnowledge(retrievedKnowledge)}`.trimEnd(),
     `${SECTION_DIVIDER}\n${formatCurrentUserMessageSection(currentMessage)}`,
   ];
 
