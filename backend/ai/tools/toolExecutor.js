@@ -1,17 +1,15 @@
-const mongoose = require('mongoose');
-const Announcement = require('../../models/Announcement');
-const Election = require('../../models/Election');
-const LostFound = require('../../models/LostFound');
-const Complaint = require('../../models/Complaint');
 const { getAvailableTools } = require('./toolRegistry');
+const { searchAnnouncements } = require('../../services/announcementService');
+const { checkStudentVotingEligibility } = require('../../services/electionService');
+const { searchLostFoundItems } = require('../../services/lostFoundService');
+const { submitComplaint, getUserComplaints } = require('../../services/complaintService');
+const { getUserNotifications } = require('../../services/notificationService');
 
 const USER_SCOPED_TOOLS = ['submitComplaint', 'getComplaintStatus', 'checkVotingEligibility', 'getNotifications'];
 
 const REQUIRED_ARGS = {
   submitComplaint: ['title', 'description'],
 };
-
-const ALLOWED_COMPLAINT_TARGETS = ['hostel_warden', 'union_member', 'librarian', 'super_admin'];
 
 const getUserId = (userContext) => {
   if (!userContext || typeof userContext !== 'object') {
@@ -24,142 +22,80 @@ const getUserId = (userContext) => {
   return raw.toString();
 };
 
-const runSearchAnnouncements = async (args) => {
-  const filter = { isActive: true };
-  if (args.category) {
-    filter.category = { $regex: `^${args.category}$`, $options: 'i' };
-  }
-  if (args.query) {
-    filter.$or = [
-      { title: { $regex: args.query, $options: 'i' } },
-      { content: { $regex: args.query, $options: 'i' } },
-    ];
-  }
-  const results = await Announcement.find(filter).sort({ createdAt: -1 }).limit(10);
-  return { success: true, data: results };
-};
-
-const runCheckVotingEligibility = async (args, userContext) => {
-  const department = userContext.department;
-
-  if (args.electionId) {
-    if (!mongoose.Types.ObjectId.isValid(args.electionId)) {
-      return { success: false, error: 'Election not found.' };
-    }
-    const election = await Election.findById(args.electionId);
-    if (!election) {
-      return { success: false, error: 'Election not found.' };
-    }
-    return {
-      success: true,
-      data: {
-        electionId: args.electionId,
-        title: election.title,
-        status: election.status,
-        eligible: election.isDepartmentEligible(department),
-      },
-    };
-  }
-
-  const elections = await Election.find({ status: 'ongoing' });
-  const eligible = elections
-    .filter((election) => election.isDepartmentEligible(department))
-    .map((election) => ({
-      id: election._id?.toString(),
-      title: election.title,
-      status: election.status,
-    }));
-
-  return { success: true, data: eligible };
-};
-
-const runSearchLostItems = async (args) => {
-  const filter = { status: 'active' };
-  if (args.type) {
-    filter.type = args.type.toLowerCase();
-  }
-  if (args.category) {
-    filter.category = { $regex: `^${args.category}$`, $options: 'i' };
-  }
-  if (args.query && args.query.trim()) {
-    const q = args.query.trim();
-    const qRegex = { $regex: q, $options: 'i' };
-    const searchConditions = [
-      { title: qRegex },
-      { description: qRegex },
-      { category: { $regex: q, $options: 'i' } },
-    ];
-    if (filter.$or) {
-      filter.$and = [{ $or: searchConditions }];
-    } else {
-      filter.$or = searchConditions;
-    }
-  }
-  const results = await LostFound.find(filter).sort({ createdAt: -1 }).limit(10);
-  return { success: true, data: results };
-};
-
-const runSubmitComplaint = async (args, userContext) => {
-  const userId = getUserId(userContext);
-  if (!userId) {
-    return { success: false, error: 'A valid user context is required for this action.' };
-  }
-  const targetAdminType = ALLOWED_COMPLAINT_TARGETS.includes(args.targetAdminType)
-    ? args.targetAdminType
-    : 'super_admin';
-
-  const complaint = await Complaint.create({
-    title: args.title,
-    description: args.description,
-    category: args.category,
-    targetAdminType,
-    isAnonymous: Boolean(args.isAnonymous),
-    submittedBy: userId,
-  });
-
-  return { success: true, data: complaint };
-};
-
-const runGetComplaintStatus = async (args, userContext) => {
-  const userId = getUserId(userContext);
-  if (!userId) {
-    return { success: false, error: 'A valid user context is required for this action.' };
-  }
-  const filter = { submittedBy: userId };
-  if (args.complaintId) {
-    if (!mongoose.Types.ObjectId.isValid(args.complaintId)) {
-      return { success: true, data: [] };
-    }
-    filter._id = args.complaintId;
-  }
-  const results = await Complaint.find(filter).sort({ createdAt: -1 });
-  return { success: true, data: results };
-};
-
-const runGetNotifications = async (args, userContext) => {
-  const userId = getUserId(userContext);
-  if (!userId) {
-    return { success: false, error: 'A valid user context is required for this action.' };
-  }
-  const [announcements, complaintUpdates] = await Promise.all([
-    Announcement.find({ isActive: true }).sort({ createdAt: -1 }).limit(5),
-    Complaint.find({ submittedBy: userId }).sort({ updatedAt: -1 }).limit(5),
-  ]);
-  return {
-    success: true,
-    data: { announcements, complaintUpdates },
-  };
-};
-
+/**
+ * Adapter tool handlers connecting Gemini function calls to the shared backend service layer.
+ */
 const TOOL_HANDLERS = {
-  searchAnnouncements: (args) => runSearchAnnouncements(args),
-  checkVotingEligibility: (args, userContext) => runCheckVotingEligibility(args, userContext),
-  searchLostItems: (args) => runSearchLostItems(args),
-  submitComplaint: (args, userContext) => runSubmitComplaint(args, userContext),
-  getComplaintStatus: (args, userContext) => runGetComplaintStatus(args, userContext),
-  getNotifications: (args, userContext) => runGetNotifications(args, userContext),
+  searchAnnouncements: async (args) => {
+    const results = await searchAnnouncements({
+      query: args.query,
+      category: args.category,
+      limit: 10,
+    });
+    return { success: true, data: results };
+  },
+
+  checkVotingEligibility: async (args, userContext) => {
+    try {
+      const result = await checkStudentVotingEligibility(userContext, {
+        electionId: args.electionId,
+      });
+      return { success: true, data: result };
+    } catch (err) {
+      if (err.statusCode === 404 || err.message.includes('not found')) {
+        return { success: false, error: 'Election not found.' };
+      }
+      throw err;
+    }
+  },
+
+  searchLostItems: async (args) => {
+    const results = await searchLostFoundItems({
+      query: args.query,
+      type: args.type,
+      category: args.category,
+      limit: 10,
+    });
+    return { success: true, data: results };
+  },
+
+  submitComplaint: async (args, userContext) => {
+    const complaint = await submitComplaint(
+      {
+        title: args.title,
+        description: args.description,
+        category: args.category,
+        targetAdminType: args.targetAdminType,
+        isAnonymous: args.isAnonymous,
+      },
+      userContext
+    );
+    return { success: true, data: complaint };
+  },
+
+  getComplaintStatus: async (args, userContext) => {
+    const results = await getUserComplaints(userContext, {
+      complaintId: args.complaintId,
+    });
+    return { success: true, data: results };
+  },
+
+  getNotifications: async (args, userContext) => {
+    const data = await getUserNotifications(userContext, {
+      unreadOnly: args.unreadOnly,
+      limit: 5,
+    });
+    return { success: true, data };
+  },
 };
 
+/**
+ * Validates and executes tool calls against the shared backend service layer.
+ *
+ * @param {object} toolCall - { name: string, arguments: object }
+ * @param {object} userContext - Authenticated user context
+ * @returns {Promise<{ success: boolean, data?: any, error?: string }>}
+ */
 const executeTool = async (toolCall, userContext) => {
   try {
     if (!toolCall || typeof toolCall !== 'object') {
