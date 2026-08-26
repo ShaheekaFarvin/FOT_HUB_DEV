@@ -30,7 +30,7 @@ const TOOL_HANDLERS = {
     const results = await searchAnnouncements({
       query: args.query,
       category: args.category,
-      limit: 10,
+      limit: 25,
     });
     return { success: true, data: results };
   },

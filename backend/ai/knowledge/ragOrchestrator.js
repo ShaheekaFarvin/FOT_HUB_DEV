@@ -23,16 +23,15 @@ const getClient = () => {
   return client;
 };
 
-
+// All live database operational intents that have authoritative tools
 const TOOL_HANDLED_INTENTS = new Set([
   'COMPLAINT_STATUS',
   'SUBMIT_COMPLAINT',
   'VOTING_ELIGIBILITY',
   'NOTIFICATIONS',
+  'ANNOUNCEMENTS',
+  'LOST_AND_FOUND',
 ]);
-
-
-const KNOWLEDGE_INTENTS = new Set(['ANNOUNCEMENTS', 'LOST_AND_FOUND']);
 
 const GREETING_PATTERN = /^(hi|hello|hey|good\s?(morning|afternoon|evening)|who are you|what can you do|thanks|thank you|bye|goodbye)\b/i;
 
@@ -40,14 +39,10 @@ const GREETING_PATTERN = /^(hi|hello|hey|good\s?(morning|afternoon|evening)|who 
  * Decides whether semantic retrieval should run for this message.
  *
  * - Greetings/small talk → never.
- * - Intents already served by a Phase 3 tool → never (tools stay
- *   authoritative for user-specific/live/mutating data).
- * - Known knowledge intents (announcements, lost & found) → always.
- * - Anything else that isn't a greeting and isn't tool-handled is treated
- *   as a general faculty inquiry (e.g. "What is Nimal's manifesto?",
- *   "What events are planned this semester?") → RAG-eligible, matching
- *   the "General Faculty Inquiries" / "Election Candidate & Manifesto
- *   Info" rows of the Topic 6.1 decision matrix.
+ * - Intents served by live database tools (announcements, complaints,
+ *   lost & found, elections, notifications) → false (tools are authoritative).
+ * - General inquiries (e.g. "What is Nimal's manifesto?", "Faculty history", etc.)
+ *   → RAG eligible.
  *
  * @param {string} message
  * @returns {boolean}
@@ -65,22 +60,12 @@ const isRagEligible = (message) => {
   if (TOOL_HANDLED_INTENTS.has(intent)) {
     return false;
   }
-  if (KNOWLEDGE_INTENTS.has(intent)) {
-    return true;
-  }
   // UNKNOWN intent, non-greeting → treat as a general knowledge question.
   return true;
 };
 
-// ---------------------------------------------------------------------------
-// Topic 6.3 — Orchestration
-// ---------------------------------------------------------------------------
-
 /**
- * Runs semantic retrieval for RAG-eligible messages. Never throws —
- * retrieval failures degrade to "no knowledge found" rather than
- * breaking the whole chat turn, since tool-based answers and greetings
- * must keep working even if the knowledge base or embedding API is down.
+ * Runs semantic retrieval for RAG-eligible messages. Never throws.
  *
  * @param {string} message
  * @returns {Promise<Array>}
@@ -167,9 +152,6 @@ const processUserRequest = async (user, message) => {
 
   const reply = response.text?.trim();
   if (!reply) {
-    // Preserves the pre-Phase-4 controller's 502 contract for this case
-    // (e.g. Gemini calls an unrecognized/unregistered tool and returns no
-    // usable text) — see Topic 6.4, "API Contract Preserved".
     const err = new Error('ragOrchestrator: AI did not return a response.');
     err.statusCode = 502;
     throw err;

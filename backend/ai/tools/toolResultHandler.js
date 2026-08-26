@@ -46,7 +46,7 @@ const formatDirectToolFallback = (toolName, safeToolResult) => {
 
   if (toolName === 'searchAnnouncements' && Array.isArray(data)) {
     if (!data.length) return 'No matching announcements were found.';
-    const items = data.map((ann) => `- ${ann.title || 'Announcement'}: ${ann.content || ''}`);
+    const items = data.map((ann) => `- [${ann.category || 'General'}] ${ann.title || 'Announcement'}: ${ann.content || ''}`);
     return items.join('\n');
   }
 

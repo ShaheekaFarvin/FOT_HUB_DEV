@@ -1,10 +1,15 @@
 const sessions = new Map();
 
+const MAX_HISTORY_LENGTH = 10;
+
 const getHistory = (userId) => sessions.get(userId) || [];
 
 const addMessage = (userId, role, content) => {
   const history = sessions.get(userId) || [];
   history.push({ role, content });
+  if (history.length > MAX_HISTORY_LENGTH) {
+    history.splice(0, history.length - MAX_HISTORY_LENGTH);
+  }
   sessions.set(userId, history);
 };
 

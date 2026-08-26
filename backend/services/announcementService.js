@@ -6,10 +6,10 @@ const Announcement = require('../models/Announcement');
  * @param {object} options
  * @param {string} [options.query] - Keyword to search within title or content.
  * @param {string} [options.category] - Category filter (case-insensitive).
- * @param {number} [options.limit=10] - Maximum number of announcements to return.
+ * @param {number} [options.limit=25] - Maximum number of announcements to return.
  * @returns {Promise<Array>}
  */
-const searchAnnouncements = async ({ query, category, limit = 10 } = {}) => {
+const searchAnnouncements = async ({ query, category, limit = 25 } = {}) => {
   const filter = { isActive: true };
 
   if (category && typeof category === 'string' && category.trim()) {
@@ -21,9 +21,9 @@ const searchAnnouncements = async ({ query, category, limit = 10 } = {}) => {
     filter.$or = [{ title: qRegex }, { content: qRegex }];
   }
 
-  const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50);
+  const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 25), 50);
   return Announcement.find(filter)
-    .sort({ createdAt: -1 })
+    .sort({ createdAt: -1, _id: -1 })
     .limit(safeLimit);
 };
 
@@ -37,7 +37,7 @@ const searchAnnouncements = async ({ query, category, limit = 10 } = {}) => {
  */
 const getActiveAnnouncements = async ({ limit = 50, populate = 'createdBy' } = {}) => {
   const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 50), 100);
-  let query = Announcement.find({ isActive: true }).sort({ createdAt: -1 }).limit(safeLimit);
+  let query = Announcement.find({ isActive: true }).sort({ createdAt: -1, _id: -1 }).limit(safeLimit);
 
   if (populate) {
     query = query.populate(populate, 'name department');
