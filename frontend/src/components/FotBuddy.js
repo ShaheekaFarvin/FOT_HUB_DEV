@@ -2,6 +2,39 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
 import { sendChatMessage } from '../services/api';
 
+const renderFormattedMessage = (text) => {
+  if (!text) return null;
+  const cleaned = text.replace(/\\([*_])/g, '$1');
+  const lines = cleaned.split('\n');
+
+  return (
+    <div className="space-y-1" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {lines.map((line, idx) => {
+        const isBullet = line.trim().startsWith('- ') || line.trim().startsWith('* ');
+        const rawContent = isBullet ? line.trim().replace(/^[-*]\s+/, '') : line;
+        
+        const parts = rawContent.split(/(\*\*.*?\*\*)/g).map((part, pIdx) => {
+          if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+            return <strong key={pIdx}>{part.slice(2, -2)}</strong>;
+          }
+          return part;
+        });
+
+        if (isBullet) {
+          return (
+            <div key={idx} className="flex items-start gap-1.5 my-0.5 pl-1">
+              <span className="font-bold select-none" style={{ color: 'var(--text-accent, #3b82f6)' }}>•</span>
+              <span>{parts}</span>
+            </div>
+          );
+        }
+
+        return <div key={idx}>{parts}</div>;
+      })}
+    </div>
+  );
+};
+
 const FotBuddy = () => {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -92,7 +125,7 @@ const FotBuddy = () => {
                       ? { background: '#1e40af', color: '#fff', borderBottomRightRadius: '4px' }
                       : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderBottomLeftRadius: '4px' }
                   }>
-                  {m.text}
+                  {renderFormattedMessage(m.text)}
                 </div>
               </div>
             ))}

@@ -1,70 +1,96 @@
-const Complaint    = require('../models/Complaint');
-const LostFound    = require('../models/LostFound');
-const Announcement = require('../models/Announcement');
-const { maskComplaint, maskComplaints } = require('../utils/complaintVisibility');
+const { getUserComplaints, submitComplaint, getPublicComplaints, ALLOWED_TARGET_ADMINS } = require('../services/complaintService');
+const { getActiveItems, submitItem, updateItem, deleteItem } = require('../services/lostFoundService');
+const { getActiveAnnouncements } = require('../services/announcementService');
 
-exports.getMyComplaints    = async (req, res) => { try { res.json(await Complaint.find({ submittedBy: req.user._id }).sort({ createdAt: -1 })); } catch (err) { res.status(500).json({ message: err.message }); } };
-exports.submitComplaint    = async (req, res) => {
+exports.getMyComplaints = async (req, res) => {
   try {
-    const allowedTargets = ['hostel_warden', 'union_member', 'librarian', 'super_admin'];
-    if (!allowedTargets.includes(req.body.targetAdminType))
-      return res.status(400).json({ message: 'Please select who this complaint should be sent to (Warden, Union Member, Librarian or Super Admin)' });
-    const data = { ...req.body, submittedBy: req.user._id };
-    if (req.file) data.imageUrl = `/uploads/${req.file.filename}`;
-    res.status(201).json(await Complaint.create(data));
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const complaints = await getUserComplaints(req.user);
+    res.json(complaints);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
-// Complaints visible to every student, like announcements — but ONLY the
-// ones the submitter marked as Public. Private complaints stay visible only
-// to the submitter (My Complaints tab) and the addressed admin.
+exports.submitComplaint = async (req, res) => {
+  try {
+    if (!ALLOWED_TARGET_ADMINS.includes(req.body.targetAdminType)) {
+      return res.status(400).json({
+        message: 'Please select who this complaint should be sent to (Warden, Union Member, Librarian or Super Admin)',
+      });
+    }
+
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.imageUrl = `/uploads/${req.file.filename}`;
+    }
+
+    const complaint = await submitComplaint(payload, req.user);
+    res.status(201).json(complaint);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 exports.getAllComplaintsPublic = async (req, res) => {
   try {
-    const complaints = await Complaint.find({ isPublic: true })
-      .sort({ createdAt: -1 })
-      .populate('submittedBy', 'name department');
-    res.json(maskComplaints(complaints, req.user));
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const publicComplaints = await getPublicComplaints(req.user);
+    res.json(publicComplaints);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
-exports.getLostFoundItems  = async (req, res) => { try { res.json(await LostFound.find({ status: 'active' }).sort({ createdAt: -1 }).populate('submittedBy','name department')); } catch (err) { res.status(500).json({ message: err.message }); } };
-exports.submitLostFound    = async (req, res) => {
+exports.getLostFoundItems = async (req, res) => {
   try {
-    const data = { ...req.body, submittedBy: req.user._id };
-    if (req.file) data.imageUrl = `/uploads/${req.file.filename}`;
-    res.status(201).json(await LostFound.create(data));
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const items = await getActiveItems();
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
-exports.getAnnouncements   = async (req, res) => { try { res.json(await Announcement.find({ isActive: true }).sort({ createdAt: -1 }).populate('createdBy','name')); } catch (err) { res.status(500).json({ message: err.message }); } };
 
-exports.updateLostFound    = async (req, res) => {
+exports.submitLostFound = async (req, res) => {
   try {
-    const item = await LostFound.findById(req.params.id);
-    if (!item) return res.status(404).json({ message: 'Item not found' });
-    if (item.submittedBy.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: 'Not authorized' });
-    const { title, description, type, category, location, date, contactInfo, status } = req.body;
-    if (title)       item.title       = title;
-    if (description) item.description = description;
-    if (type)        item.type        = type;
-    if (category)    item.category    = category;
-    if (location)    item.location    = location;
-    if (date)        item.date        = date;
-    if (contactInfo !== undefined) item.contactInfo = contactInfo;
-    if (status)      item.status      = status;
-    if (req.file)    item.imageUrl    = '/uploads/' + req.file.filename;
-    await item.save();
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.imageUrl = `/uploads/${req.file.filename}`;
+    }
+    const item = await submitItem(payload, req.user);
+    res.status(201).json(item);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getAnnouncements = async (req, res) => {
+  try {
+    const announcements = await getActiveAnnouncements({ populate: 'createdBy' });
+    res.json(announcements);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateLostFound = async (req, res) => {
+  try {
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.imageUrl = `/uploads/${req.file.filename}`;
+    }
+    const item = await updateItem(req.params.id, payload, req.user);
     res.json(item);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+  } catch (err) {
+    const status = err.statusCode || 500;
+    res.status(status).json({ message: err.message });
+  }
 };
 
-exports.deleteLostFound    = async (req, res) => {
+exports.deleteLostFound = async (req, res) => {
   try {
-    const item = await LostFound.findById(req.params.id);
-    if (!item) return res.status(404).json({ message: 'Item not found' });
-    if (item.submittedBy.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: 'Not authorized' });
-    await item.deleteOne();
-    res.json({ message: 'Deleted' });
-  } catch (err) { res.status(500).json({ message: err.message }); }
+    const result = await deleteItem(req.params.id, req.user);
+    res.json(result);
+  } catch (err) {
+    const status = err.statusCode || 500;
+    res.status(status).json({ message: err.message });
+  }
 };

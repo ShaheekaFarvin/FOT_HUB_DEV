@@ -127,4 +127,4 @@ console.log('\n--- Scenario 4: Error handling ---');
 
 // ---------------------------------------------------------------------------
 console.log(`\n=== Summary: ${passCount} passed, ${failCount} failed ===`);
-process.exit(failCount > 0 ? 1 : 0);
+process.exit(failCount > 0 ? 1 : 0);  
